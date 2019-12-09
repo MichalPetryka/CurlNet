@@ -1,0 +1,36 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 15
+VisualStudioVersion = 15.0.28307.902
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CurlNet", "CurlNet\CurlNet.csproj", "{F9BA3387-EF96-4AE9-9FC0-9A1E7C0E7AAF}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CurlNet.Tests", "CurlNet.Tests\CurlNet.Tests.csproj", "{8828A793-A144-4413-9163-F01885E0202C}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{0B104B84-AC3C-4FAE-B61C-A8CBDF176B2A}"
+	ProjectSection(SolutionItems) = preProject
+		.editorconfig = .editorconfig
+	EndProjectSection
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{F9BA3387-EF96-4AE9-9FC0-9A1E7C0E7AAF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F9BA3387-EF96-4AE9-9FC0-9A1E7C0E7AAF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F9BA3387-EF96-4AE9-9FC0-9A1E7C0E7AAF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F9BA3387-EF96-4AE9-9FC0-9A1E7C0E7AAF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8828A793-A144-4413-9163-F01885E0202C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8828A793-A144-4413-9163-F01885E0202C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8828A793-A144-4413-9163-F01885E0202C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8828A793-A144-4413-9163-F01885E0202C}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {1CBEDD60-3861-4943-9F43-7A566F3BF175}
+	EndGlobalSection
+EndGlobal
