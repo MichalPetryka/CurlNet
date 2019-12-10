@@ -20,9 +20,21 @@ namespace CurlNet
 		private byte[] _buffer;
 		private int _offset;
 		private bool _disposed;
-		
-		public string UserAgent = GetVersion();
+
+		public static readonly string CurlVersion = MarshalString.Utf8ToString(CurlNative.GetVersion());
+
 		public bool UseBom = false;
+
+		private string _userAgent;
+		public string UserAgent
+		{
+			get => _userAgent;
+			set
+			{
+				_userAgent = value;
+				SetUseragent(value);
+			}
+		}
 
 		public static bool Initialize()
 		{
@@ -59,6 +71,27 @@ namespace CurlNet
 			return string.IsNullOrEmpty(error) ? MarshalString.Utf8ToString(CurlNative.EasyStrError(code)) : error;
 		}
 
+		private void SetUseragent(string userAgent)
+		{
+			IntPtr useragentpointer = IntPtr.Zero;
+			try
+			{
+				useragentpointer = MarshalString.StringToUtf8(userAgent);
+				CurlCode result1 = CurlNative.EasySetOpt(_curl, CurlOption.Useragent, useragentpointer);
+				if (result1 != CurlCode.Ok)
+				{
+					throw new CurlException(result1, this);
+				}
+			}
+			finally
+			{
+				if (useragentpointer != IntPtr.Zero)
+				{
+					Marshal.FreeHGlobal(useragentpointer);
+				}
+			}
+		}
+
 		public Curl() : this(16384)
 		{
 		}
@@ -82,10 +115,28 @@ namespace CurlNet
 				throw new CurlEasyInitializeException("Curl Easy failed to initialize!");
 			}
 
+			SetOptions();
+			UserAgent = CurlVersion;
+		}
+
+		private void SetOptions()
+		{
 			CurlCode result = CurlNative.EasySetOpt(_curl, CurlOption.Errorbuffer, _errorBuffer);
 			if (result != CurlCode.Ok)
 			{
 				throw new CurlException(result, this);
+			}
+
+			CurlCode result1 = CurlNative.EasySetOpt(_curl, CurlOption.WriteData, this);
+			if (result1 != CurlCode.Ok)
+			{
+				throw new CurlException(result1, this);
+			}
+
+			CurlCode result2 = CurlNative.EasySetOpt(_curl, CurlOption.WriteFunction, WriteCallback);
+			if (result2 != CurlCode.Ok)
+			{
+				throw new CurlException(result2, this);
 			}
 		}
 
@@ -122,11 +173,8 @@ namespace CurlNet
 			_offset = 0;
 			CurlNative.EasyReset(_curl);
 
-			CurlCode result = CurlNative.EasySetOpt(_curl, CurlOption.Errorbuffer, _errorBuffer);
-			if (result != CurlCode.Ok)
-			{
-				throw new CurlException(result, this);
-			}
+			SetOptions();
+			SetUseragent(_userAgent);
 		}
 
 		public string GetText(string url)
@@ -150,7 +198,6 @@ namespace CurlNet
 		public ArraySegment<byte> GetBytes(string url)
 		{
 			IntPtr urlpointer = IntPtr.Zero;
-			IntPtr useragentpointer = IntPtr.Zero;
 
 			try
 			{
@@ -161,29 +208,10 @@ namespace CurlNet
 					throw new CurlException(result, this);
 				}
 
-				useragentpointer = MarshalString.StringToUtf8(UserAgent);
-				CurlCode result1 = CurlNative.EasySetOpt(_curl, CurlOption.Useragent, useragentpointer);
+				CurlCode result1 = CurlNative.EasyPerform(_curl);
 				if (result1 != CurlCode.Ok)
 				{
 					throw new CurlException(result1, this);
-				}
-
-				CurlCode result2 = CurlNative.EasySetOpt(_curl, CurlOption.WriteData, this);
-				if (result2 != CurlCode.Ok)
-				{
-					throw new CurlException(result2, this);
-				}
-
-				CurlCode result3 = CurlNative.EasySetOpt(_curl, CurlOption.WriteFunction, WriteCallback);
-				if (result3 != CurlCode.Ok)
-				{
-					throw new CurlException(result3, this);
-				}
-
-				CurlCode result4 = CurlNative.EasyPerform(_curl);
-				if (result4 != CurlCode.Ok)
-				{
-					throw new CurlException(result4, this);
 				}
 
 				return new ArraySegment<byte>(_buffer, 0, _offset);
@@ -193,10 +221,6 @@ namespace CurlNet
 				if (urlpointer != IntPtr.Zero)
 				{
 					Marshal.FreeHGlobal(urlpointer);
-				}
-				if (useragentpointer != IntPtr.Zero)
-				{
-					Marshal.FreeHGlobal(useragentpointer);
 				}
 			}
 		}
@@ -209,7 +233,6 @@ namespace CurlNet
 		public string Post(string url, string data, Encoding encoding)
 		{
 			IntPtr urlpointer = IntPtr.Zero;
-			IntPtr useragentpointer = IntPtr.Zero;
 			IntPtr datapointer = IntPtr.Zero;
 
 			try
@@ -221,36 +244,17 @@ namespace CurlNet
 					throw new CurlException(result, this);
 				}
 
-				useragentpointer = MarshalString.StringToUtf8(UserAgent);
-				CurlCode result1 = CurlNative.EasySetOpt(_curl, CurlOption.Useragent, useragentpointer);
+				datapointer = MarshalString.StringToUtf8(data);
+				CurlCode result1 = CurlNative.EasySetOpt(_curl, CurlOption.Postfields, datapointer);
 				if (result1 != CurlCode.Ok)
 				{
 					throw new CurlException(result1, this);
 				}
 
-				datapointer = MarshalString.StringToUtf8(data);
-				CurlCode result2 = CurlNative.EasySetOpt(_curl, CurlOption.Postfields, datapointer);
+				CurlCode result2 = CurlNative.EasyPerform(_curl);
 				if (result2 != CurlCode.Ok)
 				{
 					throw new CurlException(result2, this);
-				}
-				
-				CurlCode result3 = CurlNative.EasySetOpt(_curl, CurlOption.WriteData, this);
-				if (result3 != CurlCode.Ok)
-				{
-					throw new CurlException(result3, this);
-				}
-
-				CurlCode result4 = CurlNative.EasySetOpt(_curl, CurlOption.WriteFunction, WriteCallback);
-				if (result4 != CurlCode.Ok)
-				{
-					throw new CurlException(result4, this);
-				}
-
-				CurlCode result5 = CurlNative.EasyPerform(_curl);
-				if (result5 != CurlCode.Ok)
-				{
-					throw new CurlException(result5, this);
 				}
 				
 				return encoding.GetString(_buffer, 0, _offset);
@@ -260,10 +264,6 @@ namespace CurlNet
 				if (urlpointer != IntPtr.Zero)
 				{
 					Marshal.FreeHGlobal(urlpointer);
-				}
-				if (useragentpointer != IntPtr.Zero)
-				{
-					Marshal.FreeHGlobal(useragentpointer);
 				}
 				if (datapointer != IntPtr.Zero)
 				{
