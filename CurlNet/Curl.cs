@@ -5,10 +5,13 @@ using System.Runtime.InteropServices;
 using System.Text;
 // ReSharper disable MemberCanBePrivate.Global
 // ReSharper disable FieldCanBeMadeReadOnly.Global
+// ReSharper disable ConvertIfStatementToReturnStatement
+// ReSharper disable AssignNullToNotNullAttribute
+// ReSharper disable EventNeverSubscribedTo.Global
+// ReSharper disable ConvertToConstant.Global
 
 namespace CurlNet
 {
-	// ReSharper disable once ClassNeverInstantiated.Global
 	public sealed class Curl : IDisposable
 	{
 		private const int ErrorBufferSize = 256;
@@ -21,11 +24,19 @@ namespace CurlNet
 		private int _offset;
 		private bool _disposed;
 
-		public static readonly string CurlVersion = MarshalString.Utf8ToString(CurlNative.GetVersion());
+		private string _userAgent;
+		private IpResolveMode _ipMode;
+		private Progress _downloadProgress;
+		private Progress _uploadProgress;
+
+		public static readonly string CurlVersion = CurlNative.GetVersion();
 
 		public bool UseBom = false;
 
-		private string _userAgent;
+		public delegate void ProgressHandler(Curl sender, Progress progress);
+		public event ProgressHandler DownloadProgressChange;
+		public event ProgressHandler UploadProgressChange;
+
 		public string UserAgent
 		{
 			get => _userAgent;
@@ -33,6 +44,36 @@ namespace CurlNet
 			{
 				_userAgent = value;
 				SetUseragent(value);
+			}
+		}
+
+		public IpResolveMode IpMode
+		{
+			get => _ipMode;
+			set
+			{
+				_ipMode = value;
+				SetIpMode(value);
+			}
+		}
+
+		public Progress DownloadProgress
+		{
+			get => _downloadProgress;
+			private set
+			{
+				_downloadProgress = value;
+				DownloadProgressChange?.Invoke(this, value);
+			}
+		}
+
+		public Progress UploadProgress
+		{
+			get => _uploadProgress;
+			private set
+			{
+				_uploadProgress = value;
+				UploadProgressChange?.Invoke(this, value);
 			}
 		}
 
@@ -55,11 +96,6 @@ namespace CurlNet
 			}
 		}
 
-		public static string GetVersion()
-		{
-			return MarshalString.Utf8ToString(CurlNative.GetVersion());
-		}
-
 		internal string GetError(CurlCode code)
 		{
 			if (code == CurlCode.NotInitialized)
@@ -68,28 +104,17 @@ namespace CurlNet
 			}
 
 			string error = MarshalString.Utf8ToString(_errorBuffer);
-			return string.IsNullOrEmpty(error) ? MarshalString.Utf8ToString(CurlNative.EasyStrError(code)) : error;
+			return string.IsNullOrEmpty(error) ? CurlNative.GetErrorMessage(code) : error;
 		}
 
 		private void SetUseragent(string userAgent)
 		{
-			IntPtr useragentpointer = IntPtr.Zero;
-			try
-			{
-				useragentpointer = MarshalString.StringToUtf8(userAgent);
-				CurlCode result1 = CurlNative.EasySetOpt(_curl, CurlOption.Useragent, useragentpointer);
-				if (result1 != CurlCode.Ok)
-				{
-					throw new CurlException(result1, this);
-				}
-			}
-			finally
-			{
-				if (useragentpointer != IntPtr.Zero)
-				{
-					Marshal.FreeHGlobal(useragentpointer);
-				}
-			}
+			CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_curl, CurlOption.Useragent, userAgent), this);
+		}
+
+		private void SetIpMode(IpResolveMode mode)
+		{
+			CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_curl, CurlOption.Useragent, mode), this);
 		}
 
 		public Curl() : this(16384)
@@ -117,27 +142,17 @@ namespace CurlNet
 
 			SetOptions();
 			UserAgent = CurlVersion;
+			IpMode = IpResolveMode.Whatever;
 		}
 
 		private void SetOptions()
 		{
-			CurlCode result = CurlNative.EasySetOpt(_curl, CurlOption.Errorbuffer, _errorBuffer);
-			if (result != CurlCode.Ok)
-			{
-				throw new CurlException(result, this);
-			}
-
-			CurlCode result1 = CurlNative.EasySetOpt(_curl, CurlOption.WriteData, this);
-			if (result1 != CurlCode.Ok)
-			{
-				throw new CurlException(result1, this);
-			}
-
-			CurlCode result2 = CurlNative.EasySetOpt(_curl, CurlOption.WriteFunction, WriteCallback);
-			if (result2 != CurlCode.Ok)
-			{
-				throw new CurlException(result2, this);
-			}
+			CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_curl, CurlOption.Errorbuffer, _errorBuffer), this);
+			CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_curl, CurlOption.WriteData, this), this);
+			CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_curl, CurlOption.WriteFunction, WriteCallback), this);
+			CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_curl, CurlOption.NoProgress, 0), this);
+			CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_curl, CurlOption.XferInfoData, this), this);
+			CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_curl, CurlOption.XferInfoFunction, ProgressCallback), this);
 		}
 
 		~Curl()
@@ -157,10 +172,7 @@ namespace CurlNet
 			{
 				return;
 			}
-			if (_errorBuffer != IntPtr.Zero)
-			{
-				Marshal.FreeHGlobal(_errorBuffer);
-			}
+			MarshalString.FreeIfNotZero(_errorBuffer);
 			if (_curl != IntPtr.Zero)
 			{
 				CurlNative.EasyCleanup(_curl);
@@ -175,6 +187,7 @@ namespace CurlNet
 
 			SetOptions();
 			SetUseragent(_userAgent);
+			SetIpMode(IpMode);
 		}
 
 		public string GetText(string url)
@@ -185,44 +198,19 @@ namespace CurlNet
 		public string GetText(string url, Encoding encoding)
 		{
 			ArraySegment<byte> bytes = GetBytes(url);
-			// ReSharper disable once ConvertIfStatementToReturnStatement
-			// ReSharper disable AssignNullToNotNullAttribute
 			if (UseBom)
 			{
 				return BomUtil.GetEncoding(bytes, encoding, out int offset).GetString(bytes.Array, bytes.Offset + offset, bytes.Count - offset);
 			}
 			return encoding.GetString(bytes.Array, bytes.Offset, bytes.Count);
-			// ReSharper restore AssignNullToNotNullAttribute
 		}
 
 		public ArraySegment<byte> GetBytes(string url)
 		{
-			IntPtr urlpointer = IntPtr.Zero;
+			CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_curl, CurlOption.Url, url), this);
+			CurlException.ThrowIfNotOk(CurlNative.EasyPerform(_curl), this);
 
-			try
-			{
-				urlpointer = MarshalString.StringToUtf8(url);
-				CurlCode result = CurlNative.EasySetOpt(_curl, CurlOption.Url, urlpointer);
-				if (result != CurlCode.Ok)
-				{
-					throw new CurlException(result, this);
-				}
-
-				CurlCode result1 = CurlNative.EasyPerform(_curl);
-				if (result1 != CurlCode.Ok)
-				{
-					throw new CurlException(result1, this);
-				}
-
-				return new ArraySegment<byte>(_buffer, 0, _offset);
-			}
-			finally
-			{
-				if (urlpointer != IntPtr.Zero)
-				{
-					Marshal.FreeHGlobal(urlpointer);
-				}
-			}
+			return new ArraySegment<byte>(_buffer, 0, _offset);
 		}
 
 		public string Post(string url, string data)
@@ -232,43 +220,20 @@ namespace CurlNet
 
 		public string Post(string url, string data, Encoding encoding)
 		{
-			IntPtr urlpointer = IntPtr.Zero;
-			IntPtr datapointer = IntPtr.Zero;
-
+			IntPtr post = IntPtr.Zero;
 			try
 			{
-				urlpointer = MarshalString.StringToUtf8(url);
-				CurlCode result = CurlNative.EasySetOpt(_curl, CurlOption.Url, urlpointer);
-				if (result != CurlCode.Ok)
-				{
-					throw new CurlException(result, this);
-				}
+				CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_curl, CurlOption.Url, url), this);
+				post = MarshalString.StringToUtf8(data, out int length);
+				CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_curl, CurlOption.Postfieldsize, length), this);
+				CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_curl, CurlOption.Postfields, post), this);
+				CurlException.ThrowIfNotOk(CurlNative.EasyPerform(_curl), this);
 
-				datapointer = MarshalString.StringToUtf8(data);
-				CurlCode result1 = CurlNative.EasySetOpt(_curl, CurlOption.Postfields, datapointer);
-				if (result1 != CurlCode.Ok)
-				{
-					throw new CurlException(result1, this);
-				}
-
-				CurlCode result2 = CurlNative.EasyPerform(_curl);
-				if (result2 != CurlCode.Ok)
-				{
-					throw new CurlException(result2, this);
-				}
-				
 				return encoding.GetString(_buffer, 0, _offset);
 			}
 			finally
 			{
-				if (urlpointer != IntPtr.Zero)
-				{
-					Marshal.FreeHGlobal(urlpointer);
-				}
-				if (datapointer != IntPtr.Zero)
-				{
-					Marshal.FreeHGlobal(datapointer);
-				}
+				MarshalString.FreeIfNotZero(post);
 			}
 		}
 
@@ -283,6 +248,65 @@ namespace CurlNet
 			Marshal.Copy(pointer, curl._buffer, curl._offset, length);
 			curl._offset += length;
 			return new UIntPtr((uint)length);
+		}
+
+		[MonoPInvokeCallback(typeof(CurlNative.ProgressFunctionCallback))]
+		private static short ProgressCallback(Curl clientp, IntPtr dltotal, IntPtr dlnow, IntPtr ultotal, IntPtr ulnow)
+		{
+			int downloaded = (int)dlnow;
+			int downloadTotal = (int)dltotal;
+			if (downloaded != 0 && downloadTotal != 0)
+			{
+				clientp.DownloadProgress = new Progress(downloaded, downloadTotal);
+			}
+
+			int uploaded = (int)ulnow;
+			int uploadTotal = (int)ultotal;
+			if (uploaded != 0 && uploadTotal != 0)
+			{
+				clientp.UploadProgress = new Progress(uploaded, uploadTotal);
+			}
+			return 0;
+		}
+
+		public readonly struct Progress : IEquatable<Progress>
+		{
+			public readonly int Done;
+			public readonly int Total;
+
+			public Progress(int done, int total)
+			{
+				Done = done;
+				Total = total;
+			}
+
+			public bool Equals(Progress other)
+			{
+				return Done == other.Done && Total == other.Total;
+			}
+
+			public override bool Equals(object obj)
+			{
+				return obj is Progress other && Equals(other);
+			}
+
+			public override int GetHashCode()
+			{
+				unchecked
+				{
+					return (Done * 397) ^ Total;
+				}
+			}
+
+			public static bool operator ==(Progress left, Progress right)
+			{
+				return left.Equals(right);
+			}
+
+			public static bool operator !=(Progress left, Progress right)
+			{
+				return !left.Equals(right);
+			}
 		}
 	}
 }

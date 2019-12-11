@@ -15,6 +15,12 @@ namespace CurlNet
 		internal static extern IntPtr EasyInit();
 
 		[DllImport(Libcurl, EntryPoint = "curl_easy_setopt")]
+		internal static extern CurlCode EasySetOpt(IntPtr handle, CurlOption option, int value);
+
+		[DllImport(Libcurl, EntryPoint = "curl_easy_setopt")]
+		internal static extern CurlCode EasySetOpt(IntPtr handle, CurlOption option, IpResolveMode value);
+
+		[DllImport(Libcurl, EntryPoint = "curl_easy_setopt")]
 		internal static extern CurlCode EasySetOpt(IntPtr handle, CurlOption option, IntPtr value);
 
 		[DllImport(Libcurl, EntryPoint = "curl_easy_setopt")]
@@ -23,14 +29,17 @@ namespace CurlNet
 		[DllImport(Libcurl, EntryPoint = "curl_easy_setopt")]
 		internal static extern CurlCode EasySetOpt(IntPtr handle, CurlOption option, WriteFunctionCallback value);
 
+		[DllImport(Libcurl, EntryPoint = "curl_easy_setopt")]
+		internal static extern CurlCode EasySetOpt(IntPtr handle, CurlOption option, ProgressFunctionCallback value);
+
 		[DllImport(Libcurl, EntryPoint = "curl_easy_perform")]
 		internal static extern CurlCode EasyPerform(IntPtr handle);
 
 		[DllImport(Libcurl, EntryPoint = "curl_easy_strerror")]
-		internal static extern IntPtr EasyStrError(CurlCode errornum);
+		private static extern IntPtr EasyStrError(CurlCode errornum);
 
 		[DllImport(Libcurl, EntryPoint = "curl_version")]
-		internal static extern IntPtr GetVersion();
+		private static extern IntPtr GetCurlVersion();
 
 		[DllImport(Libcurl, EntryPoint = "curl_easy_reset")]
 		internal static extern void EasyReset(IntPtr handle);
@@ -42,5 +51,30 @@ namespace CurlNet
 		internal static extern void GlobalCleanup();
 
 		internal delegate UIntPtr WriteFunctionCallback(IntPtr buffer, UIntPtr size, UIntPtr nmemb, Curl userdata);
+		internal delegate short ProgressFunctionCallback(Curl clientp, IntPtr dltotal, IntPtr dlnow, IntPtr ultotal, IntPtr ulnow);
+
+		internal static CurlCode EasySetOpt(IntPtr handle, CurlOption option, string value)
+		{
+			IntPtr text = IntPtr.Zero;
+			try
+			{
+				text = MarshalString.StringToUtf8(value);
+				return EasySetOpt(handle, option, text);
+			}
+			finally
+			{
+				MarshalString.FreeIfNotZero(text);
+			}
+		}
+
+		internal static string GetVersion()
+		{
+			return MarshalString.Utf8ToString(GetCurlVersion());
+		}
+
+		internal static string GetErrorMessage(CurlCode code)
+		{
+			return MarshalString.Utf8ToString(EasyStrError(code));
+		}
 	}
 }

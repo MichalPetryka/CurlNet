@@ -15,37 +15,37 @@ namespace CurlNet
 
 		internal static Encoding GetEncoding(ArraySegment<byte> bytes, Encoding encoding, out int offset)
 		{
-			if (bytes.Array[bytes.Offset + 0] == 0x2b && bytes.Array[bytes.Offset + 1] == 0x2f && bytes.Array[bytes.Offset + 2] == 0x76)
+			if (bytes.Array[bytes.Offset] == 0x2b && bytes.Array[bytes.Offset + 1] == 0x2f && bytes.Array[bytes.Offset + 2] == 0x76)
 			{
 				offset = 3;
 				return Utf7BomEncoding;
 			}
 
-			if (bytes.Array[bytes.Offset + 0] == 0xef && bytes.Array[bytes.Offset + 1] == 0xbb && bytes.Array[bytes.Offset + 2] == 0xbf)
+			if (bytes.Array[bytes.Offset] == 0xef && bytes.Array[bytes.Offset + 1] == 0xbb && bytes.Array[bytes.Offset + 2] == 0xbf)
 			{
 				offset = 3;
 				return Utf8BomEncoding;
 			}
 
-			if (bytes.Array[bytes.Offset + 0] == 0xff && bytes.Array[bytes.Offset + 1] == 0xfe && bytes.Array[bytes.Offset + 2] == 0 && bytes.Array[bytes.Offset + 3] == 0)
+			if (bytes.Array[bytes.Offset] == 0xff && bytes.Array[bytes.Offset + 1] == 0xfe && bytes.Array[bytes.Offset + 2] == 0 && bytes.Array[bytes.Offset + 3] == 0)
 			{
 				offset = 4;
 				return Utf32LeBomEncoding;
 			}
 
-			if (bytes.Array[bytes.Offset + 0] == 0 && bytes.Array[bytes.Offset + 1] == 0 && bytes.Array[bytes.Offset + 2] == 0xfe && bytes.Array[bytes.Offset + 3] == 0xff)
+			if (bytes.Array[bytes.Offset] == 0 && bytes.Array[bytes.Offset + 1] == 0 && bytes.Array[bytes.Offset + 2] == 0xfe && bytes.Array[bytes.Offset + 3] == 0xff)
 			{
 				offset = 4;
 				return Utf32BeBomEncoding;
 			}
 
-			if (bytes.Array[bytes.Offset + 0] == 0xff && bytes.Array[bytes.Offset + 1] == 0xfe)
+			if (bytes.Array[bytes.Offset] == 0xff && bytes.Array[bytes.Offset + 1] == 0xfe)
 			{
 				offset = 2;
 				return Utf16LeBomEncoding;
 			}
 
-			if (bytes.Array[bytes.Offset + 0] == 0xfe && bytes.Array[bytes.Offset + 1] == 0xff)
+			if (bytes.Array[bytes.Offset] == 0xfe && bytes.Array[bytes.Offset + 1] == 0xff)
 			{
 				offset = 2;
 				return Utf16BeBomEncoding;

@@ -11,13 +11,13 @@ namespace CurlNet.Tests
 		[InlineData("Unknown error", CurlCode.Obsolete20)]
 		public void ErrorTest(string result, CurlCode code)
 		{
-			Assert.Equal(result, MarshalString.Utf8ToString(CurlNative.EasyStrError(code)));
+			Assert.Equal(result, CurlNative.GetErrorMessage(code));
 		}
 
 		[Fact]
 		public void VersionTest()
 		{
-			string version = Curl.GetVersion();
+			string version = Curl.CurlVersion;
 			Assert.NotNull(version);
 			Assert.False(version == "", "Version is empty");
 		}

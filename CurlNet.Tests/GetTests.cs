@@ -24,6 +24,21 @@ namespace CurlNet.Tests
 		}
 
 		[Theory]
+		[InlineData("TestFiles/Utf8Bom.txt", "TestFiles/Ucs2LeBom.txt")]
+		public void ResetTest(string path1, string path2)
+		{
+			Assert.True(Curl.Initialize());
+			using (Curl curl = new Curl())
+			{
+				curl.UseBom = true;
+				Assert.Equal(File.ReadAllText(path1), curl.GetText(new Uri(Path.GetFullPath(path1)).AbsoluteUri));
+				curl.Reset();
+				Assert.Equal(File.ReadAllText(path2), curl.GetText(new Uri(Path.GetFullPath(path2)).AbsoluteUri));
+			}
+			Curl.Deinitialize();
+		}
+
+		[Theory]
 		[InlineData("TestFiles/Utf8.txt")]
 		public void Utf8Test(string path)
 		{
