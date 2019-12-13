@@ -34,7 +34,7 @@
 		/// <summary>
 		/// Error message buffer.
 		/// </summary>
-		Errorbuffer = CurlOperationType.ObjectPointer + 10,
+		ErrorBuffer = CurlOperationType.ObjectPointer + 10,
 		/// <summary>
 		/// Callback for writing data.
 		/// </summary>
@@ -59,7 +59,7 @@
 		Infilesize = CurlOperationType.Long + 14,
 
 		/* POST static input fields. */
-		Postfields = CurlOperationType.ObjectPointer + 15,
+		PostFields = CurlOperationType.ObjectPointer + 15,
 
 		/* Set the referrer page (needed by some CGIs) */
 		Referer = CurlOperationType.StringPointer + 16,
@@ -69,7 +69,7 @@
 		Ftpport = CurlOperationType.StringPointer + 17,
 
 		/* Set the User-Agent string (examined by some CGIs) */
-		Useragent = CurlOperationType.StringPointer + 18,
+		UserAgent = CurlOperationType.StringPointer + 18,
 
 		/* If the download receives less than "low speed limit" bytes/second
 		 * during "low speed time" seconds, the operations is aborted.
@@ -198,7 +198,7 @@
 		ProxyPort = CurlOperationType.Long + 59,
 
 		/* size of the POST input data, if strlen() is not good to use */
-		Postfieldsize = CurlOperationType.Long + 60,
+		PostFieldSize = CurlOperationType.Long + 60,
 		/// <summary>
 		/// Tunnel through the HTTP proxy.
 		/// </summary>

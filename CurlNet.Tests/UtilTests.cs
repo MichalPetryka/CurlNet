@@ -3,6 +3,7 @@ using Xunit;
 
 namespace CurlNet.Tests
 {
+	[Collection("Initialize")]
 	public class UtilTests
 	{
 		[Theory]
@@ -25,7 +26,7 @@ namespace CurlNet.Tests
 		[Fact]
 		public void InitializeTest()
 		{
-			Assert.True(Curl.Initialize());
+			Assert.True(Curl.Initialize(true));
 			Curl.Deinitialize();
 		}
 	}

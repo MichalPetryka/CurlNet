@@ -3,6 +3,8 @@ using CurlNet.Exceptions;
 using System;
 using System.Runtime.InteropServices;
 using System.Text;
+using CurlNet.Memory;
+
 // ReSharper disable MemberCanBePrivate.Global
 // ReSharper disable FieldCanBeMadeReadOnly.Global
 // ReSharper disable ConvertIfStatementToReturnStatement
@@ -14,15 +16,14 @@ namespace CurlNet
 {
 	public sealed class Curl : IDisposable
 	{
-		private const int ErrorBufferSize = 256;
 		private static CurlCode _initialized = CurlCode.NotInitialized;
+		private static IMemoryHolder _memoryHolder;
 
-		private readonly IntPtr _curl;
-		private readonly IntPtr _errorBuffer;
+		private readonly NativeMemory _memory;
 
+		private bool _disposed;
 		private byte[] _buffer;
 		private int _offset;
-		private bool _disposed;
 
 		private string _userAgent;
 		private IpResolveMode _ipMode;
@@ -77,11 +78,15 @@ namespace CurlNet
 			}
 		}
 
-		public static bool Initialize()
+		public static bool Initialize(bool poolMemory)
 		{
 			if (_initialized != CurlCode.Ok)
 			{
 				_initialized = CurlNative.GlobalInit(CurlGlobal.Default);
+				if (poolMemory)
+					_memoryHolder = new MemoryPool();
+				else
+					_memoryHolder = new MemoryFactory();
 			}
 
 			return _initialized == CurlCode.Ok;
@@ -92,6 +97,8 @@ namespace CurlNet
 			if (_initialized != CurlCode.NotInitialized)
 			{
 				CurlNative.GlobalCleanup();
+				_memoryHolder.Clear();
+				_memoryHolder = null;
 				_initialized = CurlCode.NotInitialized;
 			}
 		}
@@ -100,21 +107,21 @@ namespace CurlNet
 		{
 			if (code == CurlCode.NotInitialized)
 			{
-				return "Curl Global not initialized";
+				return CurlNotInitializedException.NotInitializedMessage;
 			}
 
-			string error = MarshalString.Utf8ToString(_errorBuffer);
+			string error = _memory.GetError();
 			return string.IsNullOrEmpty(error) ? CurlNative.GetErrorMessage(code) : error;
 		}
 
 		private void SetUseragent(string userAgent)
 		{
-			CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_curl, CurlOption.Useragent, userAgent), this);
+			CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_memory.Curl, CurlOption.UserAgent, userAgent), this);
 		}
 
 		private void SetIpMode(IpResolveMode mode)
 		{
-			CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_curl, CurlOption.Useragent, mode), this);
+			CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_memory.Curl, CurlOption.UserAgent, mode), this);
 		}
 
 		public Curl() : this(16384)
@@ -132,13 +139,9 @@ namespace CurlNet
 
 				throw new CurlException(_initialized, this);
 			}
+
 			_buffer = new byte[bufferSize];
-			_errorBuffer = Marshal.AllocHGlobal(ErrorBufferSize);
-			_curl = CurlNative.EasyInit();
-			if (_curl == IntPtr.Zero)
-			{
-				throw new CurlEasyInitializeException("Curl Easy failed to initialize!");
-			}
+			_memory = _memoryHolder.GetMemory();
 
 			SetOptions();
 			UserAgent = CurlVersion;
@@ -147,12 +150,12 @@ namespace CurlNet
 
 		private void SetOptions()
 		{
-			CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_curl, CurlOption.Errorbuffer, _errorBuffer), this);
-			CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_curl, CurlOption.WriteData, this), this);
-			CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_curl, CurlOption.WriteFunction, WriteCallback), this);
-			CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_curl, CurlOption.NoProgress, 0), this);
-			CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_curl, CurlOption.XferInfoData, this), this);
-			CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_curl, CurlOption.XferInfoFunction, ProgressCallback), this);
+			CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_memory.Curl, CurlOption.ErrorBuffer, _memory.ErrorBuffer), this);
+			CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_memory.Curl, CurlOption.WriteData, this), this);
+			CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_memory.Curl, CurlOption.WriteFunction, WriteCallback), this);
+			CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_memory.Curl, CurlOption.NoProgress, 0), this);
+			CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_memory.Curl, CurlOption.XferInfoData, this), this);
+			CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_memory.Curl, CurlOption.XferInfoFunction, ProgressCallback), this);
 		}
 
 		~Curl()
@@ -172,18 +175,14 @@ namespace CurlNet
 			{
 				return;
 			}
-			MarshalString.FreeIfNotZero(_errorBuffer);
-			if (_curl != IntPtr.Zero)
-			{
-				CurlNative.EasyCleanup(_curl);
-			}
+			_memoryHolder.FreeMemory(_memory);
 			_disposed = true;
 		}
 
 		public void Reset()
 		{
 			_offset = 0;
-			CurlNative.EasyReset(_curl);
+			CurlNative.EasyReset(_memory.Curl);
 
 			SetOptions();
 			SetUseragent(_userAgent);
@@ -207,8 +206,8 @@ namespace CurlNet
 
 		public ArraySegment<byte> GetBytes(string url)
 		{
-			CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_curl, CurlOption.Url, url), this);
-			CurlException.ThrowIfNotOk(CurlNative.EasyPerform(_curl), this);
+			CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_memory.Curl, CurlOption.Url, url), this);
+			CurlException.ThrowIfNotOk(CurlNative.EasyPerform(_memory.Curl), this);
 
 			return new ArraySegment<byte>(_buffer, 0, _offset);
 		}
@@ -223,11 +222,11 @@ namespace CurlNet
 			IntPtr post = IntPtr.Zero;
 			try
 			{
-				CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_curl, CurlOption.Url, url), this);
+				CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_memory.Curl, CurlOption.Url, url), this);
 				post = MarshalString.StringToUtf8(data, out int length);
-				CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_curl, CurlOption.Postfieldsize, length), this);
-				CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_curl, CurlOption.Postfields, post), this);
-				CurlException.ThrowIfNotOk(CurlNative.EasyPerform(_curl), this);
+				CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_memory.Curl, CurlOption.PostFieldSize, length), this);
+				CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_memory.Curl, CurlOption.PostFields, post), this);
+				CurlException.ThrowIfNotOk(CurlNative.EasyPerform(_memory.Curl), this);
 
 				return encoding.GetString(_buffer, 0, _offset);
 			}
