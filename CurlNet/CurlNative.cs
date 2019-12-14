@@ -32,6 +32,15 @@ namespace CurlNet
 		[DllImport(Libcurl, EntryPoint = "curl_easy_setopt")]
 		internal static extern CurlCode EasySetOpt(IntPtr handle, CurlOption option, ProgressFunctionCallback value);
 
+		[DllImport(Libcurl, EntryPoint = "curl_easy_getinfo")]
+		internal static extern CurlCode EasyGetInfo(IntPtr handle, CurlInfo info, out IntPtr value);
+
+		[DllImport(Libcurl, EntryPoint = "curl_easy_getinfo")]
+		internal static extern CurlCode EasyGetInfo(IntPtr handle, CurlInfo info, out int value);
+
+		[DllImport(Libcurl, EntryPoint = "curl_easy_getinfo")]
+		internal static extern CurlCode EasyGetInfo(IntPtr handle, CurlInfo info, out double value);
+
 		[DllImport(Libcurl, EntryPoint = "curl_easy_perform")]
 		internal static extern CurlCode EasyPerform(IntPtr handle);
 
@@ -65,6 +74,18 @@ namespace CurlNet
 			{
 				MarshalString.FreeIfNotZero(text);
 			}
+		}
+
+		internal static CurlCode EasySetOpt(IntPtr handle, CurlOption option, bool value)
+		{
+			return EasySetOpt(handle, option, value ? 1 : 0);
+		}
+
+		internal static CurlCode EasyGetInfo(IntPtr handle, CurlInfo info, out string value)
+		{
+			CurlCode result = EasyGetInfo(handle, info, out IntPtr text);
+			value = MarshalString.Utf8ToString(text);
+			return result;
 		}
 
 		internal static string GetVersion()

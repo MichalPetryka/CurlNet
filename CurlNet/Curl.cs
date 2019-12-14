@@ -4,6 +4,7 @@ using System;
 using System.Runtime.InteropServices;
 using System.Text;
 using CurlNet.Memory;
+// ReSharper disable UnusedAutoPropertyAccessor.Global
 
 // ReSharper disable MemberCanBePrivate.Global
 // ReSharper disable FieldCanBeMadeReadOnly.Global
@@ -20,6 +21,8 @@ namespace CurlNet
 		private static IMemoryHolder _memoryHolder;
 
 		private readonly NativeMemory _memory;
+		private readonly CurlNative.WriteFunctionCallback _writeFunctionCallback;
+		private readonly CurlNative.ProgressFunctionCallback _progressFunctionCallback;
 
 		private bool _disposed;
 		private byte[] _buffer;
@@ -37,6 +40,8 @@ namespace CurlNet
 		public delegate void ProgressHandler(Curl sender, Progress progress);
 		public event ProgressHandler DownloadProgressChange;
 		public event ProgressHandler UploadProgressChange;
+
+		public int Response { get; private set; }
 
 		public string UserAgent
 		{
@@ -124,6 +129,15 @@ namespace CurlNet
 			CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_memory.Curl, CurlOption.UserAgent, mode), this);
 		}
 
+		private string ToText(ArraySegment<byte> data, Encoding encoding)
+		{
+			if (UseBom)
+			{
+				return BomUtil.GetEncoding(data, encoding, out int offset).GetString(data.Array, data.Offset + offset, data.Count - offset);
+			}
+			return encoding.GetString(data.Array, data.Offset, data.Count);
+		}
+
 		public Curl() : this(16384)
 		{
 		}
@@ -142,6 +156,8 @@ namespace CurlNet
 
 			_buffer = new byte[bufferSize];
 			_memory = _memoryHolder.GetMemory();
+			_writeFunctionCallback = WriteCallback;
+			_progressFunctionCallback = ProgressCallback;
 
 			SetOptions();
 			UserAgent = CurlVersion;
@@ -152,10 +168,10 @@ namespace CurlNet
 		{
 			CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_memory.Curl, CurlOption.ErrorBuffer, _memory.ErrorBuffer), this);
 			CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_memory.Curl, CurlOption.WriteData, this), this);
-			CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_memory.Curl, CurlOption.WriteFunction, WriteCallback), this);
-			CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_memory.Curl, CurlOption.NoProgress, 0), this);
+			CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_memory.Curl, CurlOption.WriteFunction, _writeFunctionCallback), this);
+			CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_memory.Curl, CurlOption.NoProgress, false), this);
 			CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_memory.Curl, CurlOption.XferInfoData, this), this);
-			CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_memory.Curl, CurlOption.XferInfoFunction, ProgressCallback), this);
+			CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_memory.Curl, CurlOption.XferInfoFunction, _progressFunctionCallback), this);
 		}
 
 		~Curl()
@@ -189,51 +205,103 @@ namespace CurlNet
 			SetIpMode(IpMode);
 		}
 
-		public string GetText(string url)
+		public string GetString(string url)
 		{
-			return GetText(url, Encoding.UTF8);
+			return GetString(url, Encoding.UTF8);
 		}
 
-		public string GetText(string url, Encoding encoding)
+		public string GetString(string url, Encoding encoding)
 		{
-			ArraySegment<byte> bytes = GetBytes(url);
-			if (UseBom)
-			{
-				return BomUtil.GetEncoding(bytes, encoding, out int offset).GetString(bytes.Array, bytes.Offset + offset, bytes.Count - offset);
-			}
-			return encoding.GetString(bytes.Array, bytes.Offset, bytes.Count);
+			return ToText(GetBytes(url), encoding);
 		}
 
 		public ArraySegment<byte> GetBytes(string url)
 		{
 			CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_memory.Curl, CurlOption.Url, url), this);
 			CurlException.ThrowIfNotOk(CurlNative.EasyPerform(_memory.Curl), this);
+			CurlException.ThrowIfNotOk(CurlNative.EasyGetInfo(_memory.Curl, CurlInfo.ResponseCode, out int response), this);
+			Response = response;
 
 			return new ArraySegment<byte>(_buffer, 0, _offset);
 		}
 
-		public string Post(string url, string data)
+		public string PostString(string url, string data)
 		{
-			return Post(url, data, Encoding.UTF8);
+			return PostString(url, data, Encoding.UTF8);
 		}
 
-		public string Post(string url, string data, Encoding encoding)
+		public string PostString(string url, string data, Encoding encoding)
 		{
-			IntPtr post = IntPtr.Zero;
+			IntPtr text = IntPtr.Zero;
 			try
 			{
-				CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_memory.Curl, CurlOption.Url, url), this);
-				post = MarshalString.StringToUtf8(data, out int length);
-				CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_memory.Curl, CurlOption.PostFieldSize, length), this);
-				CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_memory.Curl, CurlOption.PostFields, post), this);
-				CurlException.ThrowIfNotOk(CurlNative.EasyPerform(_memory.Curl), this);
-
-				return encoding.GetString(_buffer, 0, _offset);
+				text = MarshalString.StringToUtf8(data, out int length);
+				return ToText(Post(url, text, length), encoding);
 			}
 			finally
 			{
-				MarshalString.FreeIfNotZero(post);
+				MarshalString.FreeIfNotZero(text);
 			}
+		}
+
+		public string PostString(string url, byte[] data)
+		{
+			return PostString(url, data, Encoding.UTF8);
+		}
+
+		public string PostString(string url, byte[] data, Encoding encoding)
+		{
+			IntPtr bytes = IntPtr.Zero;
+			try
+			{
+				bytes = Marshal.AllocHGlobal(data.Length);
+				return ToText(Post(url, bytes, data.Length), encoding);
+			}
+			finally
+			{
+				MarshalString.FreeIfNotZero(bytes);
+			}
+		}
+
+		public ArraySegment<byte> PostBytes(string url, string data)
+		{
+			IntPtr text = IntPtr.Zero;
+			try
+			{
+				text = MarshalString.StringToUtf8(data, out int length);
+				return Post(url, text, length);
+			}
+			finally
+			{
+				MarshalString.FreeIfNotZero(text);
+			}
+		}
+
+		public ArraySegment<byte> PostBytes(string url, byte[] data)
+		{
+			IntPtr bytes = IntPtr.Zero;
+			try
+			{
+				bytes = Marshal.AllocHGlobal(data.Length);
+				return Post(url, bytes, data.Length);
+
+			}
+			finally
+			{
+				MarshalString.FreeIfNotZero(bytes);
+			}
+		}
+
+		private ArraySegment<byte> Post(string url, IntPtr data, int size)
+		{
+			CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_memory.Curl, CurlOption.Url, url), this);
+			CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_memory.Curl, CurlOption.PostFieldSize, size), this);
+			CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_memory.Curl, CurlOption.PostFields, data), this);
+			CurlException.ThrowIfNotOk(CurlNative.EasyPerform(_memory.Curl), this);
+			CurlException.ThrowIfNotOk(CurlNative.EasyGetInfo(_memory.Curl, CurlInfo.ResponseCode, out int response), this);
+			Response = response;
+
+			return new ArraySegment<byte>(_buffer, 0, _offset);
 		}
 
 		[MonoPInvokeCallback(typeof(CurlNative.WriteFunctionCallback))]

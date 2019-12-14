@@ -27,7 +27,7 @@ namespace CurlNet.Tests
 			{
 				using (Curl curl = new Curl())
 				{
-					curl.GetText(new Uri(Path.GetFullPath(path)).AbsoluteUri, encoding);
+					curl.GetString(new Uri(Path.GetFullPath(path)).AbsoluteUri, encoding);
 				}
 			});
 		}
@@ -39,9 +39,9 @@ namespace CurlNet.Tests
 			using (Curl curl = new Curl())
 			{
 				curl.UseBom = true;
-				Assert.Equal(File.ReadAllText(path1), curl.GetText(new Uri(Path.GetFullPath(path1)).AbsoluteUri));
+				Assert.Equal(File.ReadAllText(path1), curl.GetString(new Uri(Path.GetFullPath(path1)).AbsoluteUri));
 				curl.Reset();
-				Assert.Equal(File.ReadAllText(path2), curl.GetText(new Uri(Path.GetFullPath(path2)).AbsoluteUri));
+				Assert.Equal(File.ReadAllText(path2), curl.GetString(new Uri(Path.GetFullPath(path2)).AbsoluteUri));
 			}
 		}
 
@@ -52,43 +52,20 @@ namespace CurlNet.Tests
 			UTF8Encoding encoding = new UTF8Encoding(false, true);
 			using (Curl curl = new Curl())
 			{
-				Assert.Equal(File.ReadAllText(path, encoding), curl.GetText(new Uri(Path.GetFullPath(path)).AbsoluteUri, encoding));
+				Assert.Equal(File.ReadAllText(path, encoding), curl.GetString(new Uri(Path.GetFullPath(path)).AbsoluteUri, encoding));
 			}
 		}
 
 		[Theory]
 		[InlineData("TestFiles/Utf8Bom.txt")]
-		public void Utf8BomTest(string path)
-		{
-			UTF8Encoding encoding = new UTF8Encoding(true, true);
-			using (Curl curl = new Curl())
-			{
-				curl.UseBom = true;
-				Assert.Equal(File.ReadAllText(path, encoding), curl.GetText(new Uri(Path.GetFullPath(path)).AbsoluteUri, encoding));
-			}
-		}
-
-		[Theory]
 		[InlineData("TestFiles/Ucs2BeBom.txt")]
-		public void Ucs2BeBomTest(string path)
-		{
-			UnicodeEncoding encoding = new UnicodeEncoding(true, true, true);
-			using (Curl curl = new Curl())
-			{
-				curl.UseBom = true;
-				Assert.Equal(File.ReadAllText(path, encoding), curl.GetText(new Uri(Path.GetFullPath(path)).AbsoluteUri, encoding));
-			}
-		}
-
-		[Theory]
 		[InlineData("TestFiles/Ucs2LeBom.txt")]
-		public void Ucs2LeBomTest(string path)
+		public void BomTest(string path)
 		{
-			UnicodeEncoding encoding = new UnicodeEncoding(false, true, true);
 			using (Curl curl = new Curl())
 			{
 				curl.UseBom = true;
-				Assert.Equal(File.ReadAllText(path, encoding), curl.GetText(new Uri(Path.GetFullPath(path)).AbsoluteUri, encoding));
+				Assert.Equal(File.ReadAllText(path), curl.GetString(new Uri(Path.GetFullPath(path)).AbsoluteUri));
 			}
 		}
 	}
