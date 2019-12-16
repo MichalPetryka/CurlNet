@@ -21,7 +21,7 @@ namespace CurlNet.Tests
 		{
 			UTF8Encoding encoding = new UTF8Encoding(true, true);
 			UnicodeEncoding badencoding = new UnicodeEncoding(true, true, true);
-			Assert.Equal(BomUtil.GetEncoding(new ArraySegment<byte>(File.ReadAllBytes(path)), encoding, out _).CodePage, encoding.CodePage);
+			Assert.Equal(BomUtil.GetEncoding(File.ReadAllBytes(path), encoding, out _).CodePage, encoding.CodePage);
 			Assert.NotEqual(BomUtil.GetEncoding(new ArraySegment<byte>(File.ReadAllBytes(path)), badencoding, out _).CodePage, badencoding.CodePage);
 		}
 

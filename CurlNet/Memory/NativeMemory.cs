@@ -23,12 +23,12 @@ namespace CurlNet.Memory
 
 		internal string GetError()
 		{
-			return MarshalString.Utf8ToString(ErrorBuffer);
+			return MarshalString.NativeToString(ErrorBuffer);
 		}
 
 		private void ReleaseUnmanagedResources()
 		{
-			MarshalString.FreeIfNotZero(ErrorBuffer);
+			ErrorBuffer.FreeIfNotZero();
 			if (Curl != IntPtr.Zero)
 			{
 				CurlNative.EasyCleanup(Curl);

@@ -1,12 +1,17 @@
 ﻿using System;
 // ReSharper disable UnusedParameter.Local
+// ReSharper disable NotAccessedField.Global
+// ReSharper disable MemberCanBePrivate.Global
 
 namespace CurlNet
 {
 	internal class MonoPInvokeCallbackAttribute : Attribute
 	{
-#pragma warning disable IDE0060
-		public MonoPInvokeCallbackAttribute(Type type) { }
-#pragma warning restore IDE0060
+		public Type Type;
+
+		public MonoPInvokeCallbackAttribute(Type type)
+		{
+			Type = type;
+		}
 	}
 }

@@ -4,29 +4,34 @@ using System;
 using System.Runtime.InteropServices;
 using System.Text;
 using CurlNet.Memory;
-// ReSharper disable UnusedAutoPropertyAccessor.Global
-
-// ReSharper disable MemberCanBePrivate.Global
-// ReSharper disable FieldCanBeMadeReadOnly.Global
-// ReSharper disable ConvertIfStatementToReturnStatement
 // ReSharper disable AssignNullToNotNullAttribute
+// ReSharper disable ConvertIfStatementToReturnStatement
+// ReSharper disable MemberCanBePrivate.Global
 // ReSharper disable EventNeverSubscribedTo.Global
+// ReSharper disable UnusedAutoPropertyAccessor.Global
 // ReSharper disable ConvertToConstant.Global
+// ReSharper disable FieldCanBeMadeReadOnly.Global
 
 namespace CurlNet
 {
-	public sealed class Curl : IDisposable
+	public sealed partial class Curl : IDisposable
 	{
 		private static CurlCode _initialized = CurlCode.NotInitialized;
 		private static IMemoryHolder _memoryHolder;
 
+		[ThreadStatic]
+		private static Curl _localCurl;
+
 		private readonly NativeMemory _memory;
 		private readonly CurlNative.WriteFunctionCallback _writeFunctionCallback;
+		private readonly CurlNative.ReadFunctionCallback _readFunctionCallback;
 		private readonly CurlNative.ProgressFunctionCallback _progressFunctionCallback;
 
 		private bool _disposed;
-		private byte[] _buffer;
-		private int _offset;
+		private byte[] _downloadBuffer;
+		private int _downloadOffset;
+		private byte[] _uploadBuffer;
+		private int _uploadOffset;
 
 		private string _userAgent;
 		private IpResolveMode _ipMode;
@@ -69,7 +74,12 @@ namespace CurlNet
 			private set
 			{
 				_downloadProgress = value;
-				DownloadProgressChange?.Invoke(this, value);
+				if (DownloadProgressChange != null)
+				{
+					_localCurl = null;
+					DownloadProgressChange(this, value);
+					_localCurl = this;
+				}
 			}
 		}
 
@@ -79,7 +89,12 @@ namespace CurlNet
 			private set
 			{
 				_uploadProgress = value;
-				UploadProgressChange?.Invoke(this, value);
+				if (UploadProgressChange != null)
+				{
+					_localCurl = null;
+					UploadProgressChange(this, value);
+					_localCurl = this;
+				}
 			}
 		}
 
@@ -138,6 +153,25 @@ namespace CurlNet
 			return encoding.GetString(data.Array, data.Offset, data.Count);
 		}
 
+		private void Perform()
+		{
+			_localCurl = this;
+			try
+			{
+				CurlException.ThrowIfNotOk(CurlNative.EasyPerform(_memory.Curl), this);
+			}
+			finally
+			{
+				_localCurl = null;
+			}
+		}
+
+		private static void ThrowIfActive()
+		{
+			if (_localCurl != null)
+				throw new ThreadStaticOccupiedException(_localCurl);
+		}
+
 		public Curl() : this(16384)
 		{
 		}
@@ -154,9 +188,10 @@ namespace CurlNet
 				throw new CurlException(_initialized, this);
 			}
 
-			_buffer = new byte[bufferSize];
+			_downloadBuffer = new byte[bufferSize];
 			_memory = _memoryHolder.GetMemory();
 			_writeFunctionCallback = WriteCallback;
+			_readFunctionCallback = ReadCallback;
 			_progressFunctionCallback = ProgressCallback;
 
 			SetOptions();
@@ -167,10 +202,12 @@ namespace CurlNet
 		private void SetOptions()
 		{
 			CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_memory.Curl, CurlOption.ErrorBuffer, _memory.ErrorBuffer), this);
-			CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_memory.Curl, CurlOption.WriteData, this), this);
-			CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_memory.Curl, CurlOption.WriteFunction, _writeFunctionCallback), this);
 			CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_memory.Curl, CurlOption.NoProgress, false), this);
-			CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_memory.Curl, CurlOption.XferInfoData, this), this);
+			CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_memory.Curl, CurlOption.WriteData, IntPtr.Zero), this);
+			CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_memory.Curl, CurlOption.ReadData, IntPtr.Zero), this);
+			CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_memory.Curl, CurlOption.XferInfoData, IntPtr.Zero), this);
+			CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_memory.Curl, CurlOption.WriteFunction, _writeFunctionCallback), this);
+			CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_memory.Curl, CurlOption.ReadFunction, _readFunctionCallback), this);
 			CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_memory.Curl, CurlOption.XferInfoFunction, _progressFunctionCallback), this);
 		}
 
@@ -197,7 +234,9 @@ namespace CurlNet
 
 		public void Reset()
 		{
-			_offset = 0;
+			_downloadOffset = 0;
+			_uploadOffset = 0;
+
 			CurlNative.EasyReset(_memory.Curl);
 
 			SetOptions();
@@ -215,14 +254,15 @@ namespace CurlNet
 			return ToText(GetBytes(url), encoding);
 		}
 
-		public ArraySegment<byte> GetBytes(string url)
+		private ArraySegment<byte> GetBytes(string url)
 		{
+			ThrowIfActive();
 			CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_memory.Curl, CurlOption.Url, url), this);
-			CurlException.ThrowIfNotOk(CurlNative.EasyPerform(_memory.Curl), this);
+			Perform();
 			CurlException.ThrowIfNotOk(CurlNative.EasyGetInfo(_memory.Curl, CurlInfo.ResponseCode, out int response), this);
 			Response = response;
 
-			return new ArraySegment<byte>(_buffer, 0, _offset);
+			return new ArraySegment<byte>(_downloadBuffer, 0, _downloadOffset);
 		}
 
 		public string PostString(string url, string data)
@@ -232,15 +272,15 @@ namespace CurlNet
 
 		public string PostString(string url, string data, Encoding encoding)
 		{
-			IntPtr text = IntPtr.Zero;
+			IntPtr bytes = IntPtr.Zero;
 			try
 			{
-				text = MarshalString.StringToUtf8(data, out int length);
-				return ToText(Post(url, text, length), encoding);
+				bytes = MarshalString.StringToNative(data, encoding, out int length);
+				return ToText(Post(url, bytes, length), encoding);
 			}
 			finally
 			{
-				MarshalString.FreeIfNotZero(text);
+				bytes.FreeIfNotZero();
 			}
 		}
 
@@ -254,26 +294,31 @@ namespace CurlNet
 			IntPtr bytes = IntPtr.Zero;
 			try
 			{
-				bytes = Marshal.AllocHGlobal(data.Length);
+				bytes = data.ToIntPtr();
 				return ToText(Post(url, bytes, data.Length), encoding);
 			}
 			finally
 			{
-				MarshalString.FreeIfNotZero(bytes);
+				bytes.FreeIfNotZero();
 			}
 		}
 
 		public ArraySegment<byte> PostBytes(string url, string data)
 		{
-			IntPtr text = IntPtr.Zero;
+			return PostBytes(url, data, Encoding.UTF8);
+		}
+
+		public ArraySegment<byte> PostBytes(string url, string data, Encoding encoding)
+		{
+			IntPtr bytes = IntPtr.Zero;
 			try
 			{
-				text = MarshalString.StringToUtf8(data, out int length);
-				return Post(url, text, length);
+				bytes = MarshalString.StringToNative(data, encoding, out int length);
+				return Post(url, bytes, length);
 			}
 			finally
 			{
-				MarshalString.FreeIfNotZero(text);
+				bytes.FreeIfNotZero();
 			}
 		}
 
@@ -282,98 +327,115 @@ namespace CurlNet
 			IntPtr bytes = IntPtr.Zero;
 			try
 			{
-				bytes = Marshal.AllocHGlobal(data.Length);
+				bytes = data.ToIntPtr();
 				return Post(url, bytes, data.Length);
-
 			}
 			finally
 			{
-				MarshalString.FreeIfNotZero(bytes);
+				bytes.FreeIfNotZero();
 			}
 		}
 
 		private ArraySegment<byte> Post(string url, IntPtr data, int size)
 		{
+			ThrowIfActive();
 			CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_memory.Curl, CurlOption.Url, url), this);
 			CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_memory.Curl, CurlOption.PostFieldSize, size), this);
 			CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_memory.Curl, CurlOption.PostFields, data), this);
-			CurlException.ThrowIfNotOk(CurlNative.EasyPerform(_memory.Curl), this);
+			Perform();
 			CurlException.ThrowIfNotOk(CurlNative.EasyGetInfo(_memory.Curl, CurlInfo.ResponseCode, out int response), this);
 			Response = response;
 
-			return new ArraySegment<byte>(_buffer, 0, _offset);
+			return new ArraySegment<byte>(_downloadBuffer, 0, _downloadOffset);
+		}
+
+		public string PutString(string url, string data)
+		{
+			return PutString(url, data, Encoding.UTF8);
+		}
+
+		public string PutString(string url, string data, Encoding encoding)
+		{
+			return ToText(PutBytes(url, encoding.GetBytes(data)), encoding);
+		}
+
+		public string PutString(string url, byte[] data)
+		{
+			return PutString(url, data, Encoding.UTF8);
+		}
+
+		public string PutString(string url, byte[] data, Encoding encoding)
+		{
+			return ToText(PutBytes(url, data), encoding);
+		}
+
+		public ArraySegment<byte> PutBytes(string url, string data)
+		{
+			return PutBytes(url, data, Encoding.UTF8);
+		}
+
+		public ArraySegment<byte> PutBytes(string url, string data, Encoding encoding)
+		{
+			return PutBytes(url, encoding.GetBytes(data));
+		}
+
+		private ArraySegment<byte> PutBytes(string url, byte[] bytes)
+		{
+			ThrowIfActive();
+			_uploadBuffer = bytes;
+			CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_memory.Curl, CurlOption.Url, url), this);
+			CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_memory.Curl, CurlOption.Upload, true), this);
+			CurlException.ThrowIfNotOk(CurlNative.EasySetOpt(_memory.Curl, CurlOption.Infilesize, bytes.Length), this);
+			Perform();
+			CurlException.ThrowIfNotOk(CurlNative.EasyGetInfo(_memory.Curl, CurlInfo.ResponseCode, out int response), this);
+			Response = response;
+
+			return new ArraySegment<byte>(_downloadBuffer, 0, _downloadOffset);
 		}
 
 		[MonoPInvokeCallback(typeof(CurlNative.WriteFunctionCallback))]
-		private static UIntPtr WriteCallback(IntPtr pointer, UIntPtr size, UIntPtr nmemb, Curl curl)
+		private static UIntPtr WriteCallback(IntPtr pointer, UIntPtr size, UIntPtr nmemb, IntPtr userData)
 		{
+			Curl curl = _localCurl;
 			int length = (int)size * (int)nmemb;
-			if (curl._buffer.Length < curl._offset + length)
+			if (curl._downloadBuffer.Length < curl._downloadOffset + length)
 			{
-				Array.Resize(ref curl._buffer, Math.Max(2 * curl._buffer.Length, curl._offset + length));
+				Array.Resize(ref curl._downloadBuffer, Math.Max(2 * curl._downloadBuffer.Length, curl._downloadOffset + length));
 			}
-			Marshal.Copy(pointer, curl._buffer, curl._offset, length);
-			curl._offset += length;
+			Marshal.Copy(pointer, curl._downloadBuffer, curl._downloadOffset, length);
+			curl._downloadOffset += length;
 			return new UIntPtr((uint)length);
 		}
 
+		[MonoPInvokeCallback(typeof(CurlNative.ReadFunctionCallback))]
+		private static UIntPtr ReadCallback(IntPtr pointer, UIntPtr size, UIntPtr nmemb, IntPtr userData)
+		{
+			Curl curl = _localCurl;
+			int length = (int)size * (int)nmemb;
+			int dataLeft = curl._uploadBuffer.Length - curl._uploadOffset;
+			int toCopy = Math.Min(length, dataLeft);
+			Marshal.Copy(curl._uploadBuffer, curl._uploadOffset, pointer, toCopy);
+			curl._uploadOffset += toCopy;
+			return new UIntPtr((uint)(curl._uploadBuffer.Length - curl._uploadOffset));
+		}
+
 		[MonoPInvokeCallback(typeof(CurlNative.ProgressFunctionCallback))]
-		private static short ProgressCallback(Curl clientp, IntPtr dltotal, IntPtr dlnow, IntPtr ultotal, IntPtr ulnow)
+		private static short ProgressCallback(IntPtr clientp, IntPtr dltotal, IntPtr dlnow, IntPtr ultotal, IntPtr ulnow)
 		{
 			int downloaded = (int)dlnow;
 			int downloadTotal = (int)dltotal;
 			if (downloaded != 0 && downloadTotal != 0)
 			{
-				clientp.DownloadProgress = new Progress(downloaded, downloadTotal);
+				_localCurl.DownloadProgress = new Progress(downloaded, downloadTotal);
 			}
 
 			int uploaded = (int)ulnow;
 			int uploadTotal = (int)ultotal;
 			if (uploaded != 0 && uploadTotal != 0)
 			{
-				clientp.UploadProgress = new Progress(uploaded, uploadTotal);
+				_localCurl.UploadProgress = new Progress(uploaded, uploadTotal);
 			}
 			return 0;
-		}
-
-		public readonly struct Progress : IEquatable<Progress>
-		{
-			public readonly int Done;
-			public readonly int Total;
-
-			public Progress(int done, int total)
-			{
-				Done = done;
-				Total = total;
-			}
-
-			public bool Equals(Progress other)
-			{
-				return Done == other.Done && Total == other.Total;
-			}
-
-			public override bool Equals(object obj)
-			{
-				return obj is Progress other && Equals(other);
-			}
-
-			public override int GetHashCode()
-			{
-				unchecked
-				{
-					return (Done * 397) ^ Total;
-				}
-			}
-
-			public static bool operator ==(Progress left, Progress right)
-			{
-				return left.Equals(right);
-			}
-
-			public static bool operator !=(Progress left, Progress right)
-			{
-				return !left.Equals(right);
-			}
 		}
 	}
 }

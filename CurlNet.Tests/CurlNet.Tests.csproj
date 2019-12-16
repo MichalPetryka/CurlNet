@@ -13,6 +13,9 @@
 		<ProjectReference Include="..\CurlNet\CurlNet.csproj" />
 	</ItemGroup>
 	<ItemGroup>
+		<None Update="TestFiles\LargeUtf8Bom.txt">
+		  <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
 		<None Update="TestFiles\Ucs2BeBom.txt">
 			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
 		</None>

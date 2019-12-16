@@ -5,7 +5,8 @@ namespace CurlNet.Exceptions
 {
 	public class MarshalStringException : Exception
 	{
-		public MarshalStringException() : base("String UTF-8 encoding failed!")
+		private const string MarshalStringMessage = "String UTF-8 encoding failed!";
+		public MarshalStringException() : base(MarshalStringMessage)
 		{
 
 		}

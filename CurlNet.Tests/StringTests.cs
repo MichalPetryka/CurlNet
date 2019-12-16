@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Runtime.InteropServices;
 using Xunit;
 
 namespace CurlNet.Tests
@@ -10,7 +9,7 @@ namespace CurlNet.Tests
 		[InlineData(null)]
 		public void Utf8NullTest(string text)
 		{
-			Assert.Equal(IntPtr.Zero, MarshalString.StringToUtf8(text));
+			Assert.Equal(IntPtr.Zero, MarshalString.StringToNative(text));
 		}
 
 		[Theory]
@@ -25,17 +24,15 @@ namespace CurlNet.Tests
 		[InlineData("$¢€𐍈")]
 		public void Utf8NotNullTest(string text)
 		{
-			IntPtr pointer = MarshalString.StringToUtf8(text);
+			IntPtr pointer = IntPtr.Zero;
 			try
 			{
+				pointer = MarshalString.StringToNative(text);
 				Assert.NotEqual(IntPtr.Zero, pointer);
 			}
 			finally
 			{
-				if (pointer != IntPtr.Zero)
-				{
-					Marshal.FreeHGlobal(pointer);
-				}
+				pointer.FreeIfNotZero();
 			}
 		}
 
@@ -52,20 +49,16 @@ namespace CurlNet.Tests
 		[InlineData("$¢€𐍈")]
 		public void Utf8MarshalTest(string text)
 		{
-			IntPtr pointer = MarshalString.StringToUtf8(text);
-			string marshalled;
+			IntPtr pointer = IntPtr.Zero;
 			try
 			{
-				marshalled = MarshalString.Utf8ToString(pointer);
+				pointer = MarshalString.StringToNative(text);
+				Assert.Equal(text, MarshalString.NativeToString(pointer));
 			}
 			finally
 			{
-				if (pointer != IntPtr.Zero)
-				{
-					Marshal.FreeHGlobal(pointer);
-				}
+				pointer.FreeIfNotZero();
 			}
-			Assert.Equal(text, marshalled);
 		}
 	}
 }

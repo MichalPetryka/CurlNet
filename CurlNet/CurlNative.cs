@@ -1,6 +1,7 @@
 ﻿using CurlNet.Enums;
 using System;
 using System.Runtime.InteropServices;
+// ReSharper disable MemberCanBePrivate.Global
 
 namespace CurlNet
 {
@@ -24,10 +25,10 @@ namespace CurlNet
 		internal static extern CurlCode EasySetOpt(IntPtr handle, CurlOption option, IntPtr value);
 
 		[DllImport(Libcurl, EntryPoint = "curl_easy_setopt")]
-		internal static extern CurlCode EasySetOpt(IntPtr handle, CurlOption option, Curl value);
+		internal static extern CurlCode EasySetOpt(IntPtr handle, CurlOption option, WriteFunctionCallback value);
 
 		[DllImport(Libcurl, EntryPoint = "curl_easy_setopt")]
-		internal static extern CurlCode EasySetOpt(IntPtr handle, CurlOption option, WriteFunctionCallback value);
+		internal static extern CurlCode EasySetOpt(IntPtr handle, CurlOption option, ReadFunctionCallback value);
 
 		[DllImport(Libcurl, EntryPoint = "curl_easy_setopt")]
 		internal static extern CurlCode EasySetOpt(IntPtr handle, CurlOption option, ProgressFunctionCallback value);
@@ -59,20 +60,21 @@ namespace CurlNet
 		[DllImport(Libcurl, EntryPoint = "curl_global_cleanup")]
 		internal static extern void GlobalCleanup();
 
-		internal delegate UIntPtr WriteFunctionCallback(IntPtr buffer, UIntPtr size, UIntPtr nmemb, Curl userdata);
-		internal delegate short ProgressFunctionCallback(Curl clientp, IntPtr dltotal, IntPtr dlnow, IntPtr ultotal, IntPtr ulnow);
+		internal delegate UIntPtr WriteFunctionCallback(IntPtr buffer, UIntPtr size, UIntPtr nmemb, IntPtr userData);
+		internal delegate UIntPtr ReadFunctionCallback(IntPtr buffer, UIntPtr size, UIntPtr nmemb, IntPtr userData);
+		internal delegate short ProgressFunctionCallback(IntPtr userData, IntPtr dltotal, IntPtr dlnow, IntPtr ultotal, IntPtr ulnow);
 
 		internal static CurlCode EasySetOpt(IntPtr handle, CurlOption option, string value)
 		{
 			IntPtr text = IntPtr.Zero;
 			try
 			{
-				text = MarshalString.StringToUtf8(value);
+				text = MarshalString.StringToNative(value);
 				return EasySetOpt(handle, option, text);
 			}
 			finally
 			{
-				MarshalString.FreeIfNotZero(text);
+				text.FreeIfNotZero();
 			}
 		}
 
@@ -84,18 +86,18 @@ namespace CurlNet
 		internal static CurlCode EasyGetInfo(IntPtr handle, CurlInfo info, out string value)
 		{
 			CurlCode result = EasyGetInfo(handle, info, out IntPtr text);
-			value = MarshalString.Utf8ToString(text);
+			value = MarshalString.NativeToString(text);
 			return result;
 		}
 
 		internal static string GetVersion()
 		{
-			return MarshalString.Utf8ToString(GetCurlVersion());
+			return MarshalString.NativeToString(GetCurlVersion());
 		}
 
 		internal static string GetErrorMessage(CurlCode code)
 		{
-			return MarshalString.Utf8ToString(EasyStrError(code));
+			return MarshalString.NativeToString(EasyStrError(code));
 		}
 	}
 }

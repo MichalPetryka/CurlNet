@@ -1,91 +1,75 @@
 ﻿using System;
 using System.Runtime.InteropServices;
 using System.Text;
-#if !NETSTANDARD1_1
 using CurlNet.Exceptions;
-#endif
 // ReSharper disable MemberCanBePrivate.Global
 
 namespace CurlNet
 {
 	internal static unsafe class MarshalString
 	{
-		internal static IntPtr StringToUtf8(string input)
+		internal static byte[] ToArray(this IntPtr pointer, int length)
 		{
-			if (input == null) return IntPtr.Zero;
-#if NETSTANDARD1_1
-			byte[] data = Encoding.UTF8.GetBytes(input);
-			IntPtr buffer = Marshal.AllocHGlobal(data.Length + 1);
-			Marshal.Copy(data, 0, buffer, data.Length);
-			((byte*)buffer.ToPointer())[data.Length + 1] = 0;
-			return buffer;
-#else
-			fixed (char* pInput = input)
-			{
-				int length = Encoding.UTF8.GetByteCount(input);
-				IntPtr buffer = Marshal.AllocHGlobal(length + 1);
-				byte* pResult = (byte*)buffer.ToPointer();
-				int bytesWritten = Encoding.UTF8.GetBytes(pInput, input.Length, pResult, length);
-				if (bytesWritten != length) throw new MarshalStringException();
-				pResult[length] = 0;
-				return buffer;
-			}
-#endif
+			byte[] data = new byte[length];
+			Marshal.Copy(pointer, data, 0, length);
+			return data;
 		}
 
-		internal static IntPtr StringToUtf8(string input, out int length)
+		internal static IntPtr ToIntPtr(this byte[] bytes)
+		{
+			IntPtr data = Marshal.AllocHGlobal(bytes.Length);
+			Marshal.Copy(bytes, 0, data, bytes.Length);
+			return data;
+		}
+
+		internal static IntPtr StringToNative(string input)
+		{
+			return StringToNative(input, Encoding.UTF8, out _);
+		}
+
+		internal static IntPtr StringToNative(string input, out int length)
+		{
+			return StringToNative(input, Encoding.UTF8, out length);
+		}
+
+		internal static IntPtr StringToNative(string input, Encoding encoding)
+		{
+			return StringToNative(input, encoding, out _);
+		}
+
+		internal static IntPtr StringToNative(string input, Encoding encoding, out int length)
 		{
 			if (input == null)
 			{
 				length = 0;
 				return IntPtr.Zero;
 			}
-#if NETSTANDARD1_1
-			byte[] data = Encoding.UTF8.GetBytes(input);
-			length = data.Length;
-			IntPtr buffer = Marshal.AllocHGlobal(length + 1);
-			Marshal.Copy(data, 0, buffer, length);
-			((byte*)buffer.ToPointer())[length + 1] = 0;
-			return buffer;
-#else
 			fixed (char* pInput = input)
 			{
-				length = Encoding.UTF8.GetByteCount(input);
+				length = encoding.GetByteCount(input);
 				IntPtr buffer = Marshal.AllocHGlobal(length + 1);
 				byte* pResult = (byte*)buffer.ToPointer();
-				int bytesWritten = Encoding.UTF8.GetBytes(pInput, input.Length, pResult, length);
+				int bytesWritten = encoding.GetBytes(pInput, input.Length, pResult, length);
 				if (bytesWritten != length) throw new MarshalStringException();
 				pResult[length] = 0;
 				return buffer;
 			}
-#endif
 		}
 
-		internal static void FreeIfNotZero(IntPtr text)
+		internal static void FreeIfNotZero(this IntPtr pointer)
 		{
-			if (text != IntPtr.Zero)
-			{
-				Marshal.FreeHGlobal(text);
-			}
+			if (pointer != IntPtr.Zero)
+				Marshal.FreeHGlobal(pointer);
 		}
 
-		internal static string Utf8ToString(IntPtr pStringUtf8)
+		internal static string NativeToString(IntPtr pStringUtf8)
 		{
-			return Utf8ToString((byte*)pStringUtf8.ToPointer());
+			return NativeToString(pStringUtf8, Encoding.UTF8);
 		}
 		
-		internal static string Utf8ToString(byte* pStringUtf8)
+		internal static string NativeToString(byte* pString)
 		{
-			if (pStringUtf8 == null) return null;
-			int len = 0;
-			while (pStringUtf8[len] != 0) len++;
-#if NET35 || NETSTANDARD1_1
-			byte[] data = new byte[len];
-			Marshal.Copy((IntPtr)pStringUtf8, data, 0, len);
-			return Encoding.UTF8.GetString(data, 0, len);
-#else
-			return Encoding.UTF8.GetString(pStringUtf8, len);
-#endif
+			return NativeToString(pString, Encoding.UTF8);
 		}
 
 		internal static string NativeToString(IntPtr pString, Encoding encoding)
@@ -98,13 +82,7 @@ namespace CurlNet
 			if (pString == null) return null;
 			int len = 0;
 			while (pString[len] != 0) len++;
-#if NET35 || NETSTANDARD1_1
-			byte[] data = new byte[len];
-			Marshal.Copy((IntPtr)pString, data, 0, len);
-			return encoding.GetString(data, 0, len);
-#else
 			return encoding.GetString(pString, len);
-#endif
 		}
 	}
 }

@@ -57,6 +57,7 @@ namespace CurlNet.Tests
 		}
 
 		[Theory]
+		[InlineData("TestFiles/LargeUtf8Bom.txt")]
 		[InlineData("TestFiles/Utf8Bom.txt")]
 		[InlineData("TestFiles/Ucs2BeBom.txt")]
 		[InlineData("TestFiles/Ucs2LeBom.txt")]
