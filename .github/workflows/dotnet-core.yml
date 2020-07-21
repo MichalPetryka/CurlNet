@@ -8,34 +8,17 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest, windows-latest]
         framework: ['2.1', '3.1']
     timeout-minutes: 30
     
     steps:
     - uses: actions/checkout@v2.2.0
         
-    - name: Setup .NET Core 2.1
+    - name: Setup .NET Core
       uses: actions/setup-dotnet@v1.5.0
       with:
-        dotnet-version: 2.1.808
-        
-    - name: Setup .NET Core 3.1
-      uses: actions/setup-dotnet@v1.5.0
-      with:
-        dotnet-version: 3.1.302
-        
-    - name: Setup side by side .NET SDKs on Windows
-      if: matrix.os == 'windows-latest'
-      run: |
-        SET DOTNET_21_ROOT=%DOTNET_ROOT:3.1.302=2.1.808%
-        xcopy /s /y /d %DOTNET_31_ROOT% %DOTNET_ROOT%
-      shell: cmd
-
-    - name: Setup side by side .NET SDKs on *nix
-      if: matrix.os != 'windows-latest'
-      run: |
-        rsync -a ${DOTNET_ROOT/3.1.302/2.1.808}/* $DOTNET_ROOT/
+        dotnet-version: ${{ matrix.framework }}
         
     - name: Tests
       run: dotnet test --framework netcoreapp${{ matrix.framework }}
