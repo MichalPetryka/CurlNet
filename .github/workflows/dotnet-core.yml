@@ -20,5 +20,10 @@ jobs:
       with:
         dotnet-version: ${{ matrix.framework }}
         
+    - if: matrix.os == 'ubuntu-latest'
+      name: Install Linux packages
+      run: |
+       ldconfig -l libcurl.so
+        
     - name: Tests
       run: dotnet test --framework netcoreapp${{ matrix.framework }}
