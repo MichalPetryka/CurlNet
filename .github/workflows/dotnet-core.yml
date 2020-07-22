@@ -20,5 +20,11 @@ jobs:
       with:
         dotnet-version: ${{ matrix.framework }}
         
+    - if: matrix.os == 'ubuntu-latest'
+      name: Install Curl
+      run: |
+       sudo apt update
+       sudo apt install -y curl
+        
     - name: Tests
       run: dotnet test --framework netcoreapp${{ matrix.framework }}
