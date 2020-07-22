@@ -2,12 +2,12 @@
 {
 	internal class MemoryFactory : IMemoryHolder
 	{
-		public NativeMemory GetMemory()
+		public NativeMemory Get()
 		{
 			return new NativeMemory();
 		}
 
-		public void FreeMemory(NativeMemory memory)
+		public void Free(NativeMemory memory)
 		{
 			memory.Dispose();
 		}

@@ -17,24 +17,18 @@ namespace CurlNet
 
 		internal static IntPtr ToIntPtr(this byte[] bytes)
 		{
-			IntPtr data = Marshal.AllocHGlobal(bytes.Length);
+			IntPtr data = Marshal.AllocCoTaskMem(bytes.Length);
 			Marshal.Copy(bytes, 0, data, bytes.Length);
 			return data;
 		}
 
 		internal static IntPtr StringToNative(string input)
 		{
+#if NETSTANDARD2_1 || NETCOREAPP2_1
+			return Marshal.StringToCoTaskMemUTF8(input);
+#else
 			return StringToNative(input, Encoding.UTF8, out _);
-		}
-
-		internal static IntPtr StringToNative(string input, out int length)
-		{
-			return StringToNative(input, Encoding.UTF8, out length);
-		}
-
-		internal static IntPtr StringToNative(string input, Encoding encoding)
-		{
-			return StringToNative(input, encoding, out _);
+#endif
 		}
 
 		internal static IntPtr StringToNative(string input, Encoding encoding, out int length)
@@ -44,45 +38,47 @@ namespace CurlNet
 				length = 0;
 				return IntPtr.Zero;
 			}
-			fixed (char* pInput = input)
-			{
-				length = encoding.GetByteCount(input);
-				IntPtr buffer = Marshal.AllocHGlobal(length + 1);
-				byte* pResult = (byte*)buffer.ToPointer();
-				int bytesWritten = encoding.GetBytes(pInput, input.Length, pResult, length);
-				if (bytesWritten != length) throw new MarshalStringException();
-				pResult[length] = 0;
-				return buffer;
-			}
+			length = encoding.GetByteCount(input);
+			IntPtr buffer = Marshal.AllocCoTaskMem(length + 1);
+			byte* pResult = (byte*)buffer.ToPointer();
+			int bytesWritten;
+			fixed (char* pInput = input) 
+				bytesWritten = encoding.GetBytes(pInput, input.Length, pResult, length);
+			if (bytesWritten != length) throw new MarshalStringException();
+			pResult[length] = 0;
+			return buffer;
 		}
 
-		internal static void FreeIfNotZero(this IntPtr pointer)
+		internal static void Free(this IntPtr pointer)
 		{
-			if (pointer != IntPtr.Zero)
-				Marshal.FreeHGlobal(pointer);
+			Marshal.FreeCoTaskMem(pointer);
 		}
 
 		internal static string NativeToString(IntPtr pStringUtf8)
 		{
-			return NativeToString(pStringUtf8, Encoding.UTF8);
+#if NETSTANDARD2_1 || NETCOREAPP2_1
+			return Marshal.PtrToStringUTF8(pStringUtf8);
+#else
+			return NativeToString((byte*)pStringUtf8.ToPointer(), Encoding.UTF8);
+#endif
 		}
-		
+
 		internal static string NativeToString(byte* pString)
 		{
+#if NETSTANDARD2_1 || NETCOREAPP2_1
+			return Marshal.PtrToStringUTF8(new IntPtr(pString));
+		}
+#else
 			return NativeToString(pString, Encoding.UTF8);
 		}
 
-		internal static string NativeToString(IntPtr pString, Encoding encoding)
-		{
-			return NativeToString((byte*)pString.ToPointer(), encoding);
-		}
-
-		internal static string NativeToString(byte* pString, Encoding encoding)
+		private static string NativeToString(byte* pString, Encoding encoding)
 		{
 			if (pString == null) return null;
 			int len = 0;
 			while (pString[len] != 0) len++;
 			return encoding.GetString(pString, len);
 		}
+#endif
 	}
 }

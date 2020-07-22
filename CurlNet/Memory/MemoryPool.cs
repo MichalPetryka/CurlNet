@@ -7,7 +7,7 @@ namespace CurlNet.Memory
 		private static readonly Queue<NativeMemory> Pool = new Queue<NativeMemory>();
 		private static readonly object LockObject = new object();
 
-		public NativeMemory GetMemory()
+		public NativeMemory Get()
 		{
 			lock (LockObject)
 			{
@@ -19,9 +19,9 @@ namespace CurlNet.Memory
 			return new NativeMemory();
 		}
 
-		public void FreeMemory(NativeMemory memory)
+		public void Free(NativeMemory memory)
 		{
-			CurlNative.EasyReset(memory.Curl);
+			memory.Curl.EasyReset();
 			lock (LockObject)
 			{
 				Pool.Enqueue(memory);

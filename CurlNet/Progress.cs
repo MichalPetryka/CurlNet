@@ -16,6 +16,7 @@ namespace CurlNet
 				Total = total;
 			}
 
+			#region IEquatable
 			public bool Equals(Progress other)
 			{
 				return Done == other.Done && Total == other.Total;
@@ -42,6 +43,14 @@ namespace CurlNet
 			public static bool operator !=(Progress left, Progress right)
 			{
 				return !left.Equals(right);
+			}
+			#endregion
+
+			public override string ToString()
+			{
+				// ReSharper disable RedundantToStringCallForValueType
+				return Done.ToString() + "/" + Total.ToString();
+				// ReSharper restore RedundantToStringCallForValueType
 			}
 		}
 	}

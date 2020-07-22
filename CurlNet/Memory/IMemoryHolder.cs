@@ -2,8 +2,8 @@
 {
 	internal interface IMemoryHolder
 	{
-		NativeMemory GetMemory();
-		void FreeMemory(NativeMemory memory);
+		NativeMemory Get();
+		void Free(NativeMemory memory);
 		void Clear();
 	}
 }

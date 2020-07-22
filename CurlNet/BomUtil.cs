@@ -15,6 +15,7 @@ namespace CurlNet
 
 		internal static Encoding GetEncoding(ArraySegment<byte> bytes, Encoding encoding, out int offset)
 		{
+			#region Known BOMs
 			if (bytes.Count >= 3 && bytes.Array[bytes.Offset] == 0x2b && bytes.Array[bytes.Offset + 1] == 0x2f && bytes.Array[bytes.Offset + 2] == 0x76)
 			{
 				offset = 3;
@@ -50,26 +51,29 @@ namespace CurlNet
 				offset = 2;
 				return Utf16BeBomEncoding;
 			}
+			#endregion
 
+#if NETSTANDARD2_1 || NETCOREAPP2_1
+			ReadOnlySpan<byte> bom = encoding.Preamble;
+#else
 			byte[] bom = encoding.GetPreamble();
-			bool bomPresent = true;
+#endif
 			if (bytes.Count < bom.Length)
 			{
-				bomPresent = false;
+				offset = 0;
+				return encoding;
 			}
-			else
+
+			for (int i = 0; i < bom.Length; i++)
 			{
-				for (int i = 0; i < bom.Length; i++)
+				if (bytes.Array[bytes.Offset + i] != bom[i])
 				{
-					if (bytes.Array[bytes.Offset + i] != bom[i])
-					{
-						bomPresent = false;
-						break;
-					}
+					offset = 0;
+					return encoding;
 				}
 			}
 
-			offset = bomPresent ? bom.Length : 0;
+			offset = bom.Length;
 			return encoding;
 		}
 	}

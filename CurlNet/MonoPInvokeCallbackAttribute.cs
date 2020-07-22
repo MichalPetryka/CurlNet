@@ -1,7 +1,5 @@
 ﻿using System;
-// ReSharper disable UnusedParameter.Local
-// ReSharper disable NotAccessedField.Global
-// ReSharper disable MemberCanBePrivate.Global
+// ReSharper disable All
 
 namespace CurlNet
 {

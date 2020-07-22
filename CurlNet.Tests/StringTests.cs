@@ -1,10 +1,14 @@
 ﻿using System;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace CurlNet.Tests
 {
 	public class StringTests
 	{
+		private readonly ITestOutputHelper _output;
+		public StringTests(ITestOutputHelper output) => _output = output;
+
 		[Theory]
 		[InlineData(null)]
 		public void Utf8NullTest(string text)
@@ -32,7 +36,7 @@ namespace CurlNet.Tests
 			}
 			finally
 			{
-				pointer.FreeIfNotZero();
+				pointer.Free();
 			}
 		}
 
@@ -53,11 +57,13 @@ namespace CurlNet.Tests
 			try
 			{
 				pointer = MarshalString.StringToNative(text);
-				Assert.Equal(text, MarshalString.NativeToString(pointer));
+				string s = MarshalString.NativeToString(pointer);
+				_output.WriteLine(s ?? "(null)");
+				Assert.Equal(text, s);
 			}
 			finally
 			{
-				pointer.FreeIfNotZero();
+				pointer.Free();
 			}
 		}
 	}

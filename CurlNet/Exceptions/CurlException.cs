@@ -15,8 +15,11 @@ namespace CurlNet.Exceptions
 			Code = code;
 			Instance = instance;
 		}
+	}
 
-		internal static void ThrowIfNotOk(CurlCode code, Curl instance)
+	internal static class CurlExceptionHelper
+	{
+		internal static void ThrowIfNotOk(this Curl instance, CurlCode code)
 		{
 			if (code != CurlCode.Ok)
 			{

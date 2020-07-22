@@ -8,14 +8,14 @@ namespace CurlNet.Memory
 	{
 		private const int ErrorBufferSize = 256;
 
-		internal IntPtr Curl;
+		internal CurlNative.CurlHandle Curl;
 		internal IntPtr ErrorBuffer;
 
 		internal NativeMemory()
 		{
-			ErrorBuffer = Marshal.AllocHGlobal(ErrorBufferSize);
+			ErrorBuffer = Marshal.AllocCoTaskMem(ErrorBufferSize);
 			Curl = CurlNative.EasyInit();
-			if (Curl == IntPtr.Zero)
+			if (Curl == CurlNative.CurlHandle.Null)
 			{
 				throw new CurlEasyInitializeException("Curl Easy failed to initialize!");
 			}
@@ -28,10 +28,10 @@ namespace CurlNet.Memory
 
 		private void ReleaseUnmanagedResources()
 		{
-			ErrorBuffer.FreeIfNotZero();
-			if (Curl != IntPtr.Zero)
+			ErrorBuffer.Free();
+			if (Curl != CurlNative.CurlHandle.Null)
 			{
-				CurlNative.EasyCleanup(Curl);
+				Curl.EasyCleanup();
 			}
 		}
 
