@@ -23,8 +23,7 @@ jobs:
     - if: matrix.os == 'ubuntu-latest'
       name: Install libcurl
       run: |
-       sudo apt update
-       sudo apt install -y libcurl4
+       sudo apt update && sudo apt install -y libcurl4
         
     - name: Tests
       run: dotnet test --framework netcoreapp${{ matrix.framework }}
