@@ -9,7 +9,7 @@ namespace CurlNet
 {
 	internal static class CurlNative
 	{
-		private const string Libcurl = "libcurl";
+		private const string Libcurl = "curl";
 
 		[DllImport(Libcurl, EntryPoint = "curl_global_init")]
 		internal static extern CurlCode GlobalInit(CurlGlobal flags);
